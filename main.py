@@ -1,187 +1,103 @@
 
-from unicodedata import name
-import pandas as pd
+import flet import *
 import string
 import random
-# Importing the PIL library
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
-import tkinter as tk
-from tkinter import Button, filedialog
+from PIL import Image, ImageDraw, ImageFont
+import pandas as pd
 import routeros_api
 
-
-## characters to generate password from
+# Characters for password generation
 characters = list(string.ascii_letters + string.digits + "!@#$%^&*()")
 
 
+# Function to generate a random password
+def generate_random_password(length=8):
+    random.shuffle(characters)
+    password = [random.choice(characters) for _ in range(length)]
+    random.shuffle(password)
+    return "".join(password)
 
 
- 
-# Open an Image
-
-def createCard(username, password):
-	img = Image.open('card.jpg')
-	
-	# Call draw Method to add 2D graphics in an image
-	I1 = ImageDraw.Draw(img)
-	
-	# Custom font style and font size
-	myFont = ImageFont.truetype('font\DINNextLTArabic-Medium-4.ttf', 30)
-	
-	# Add Text to an image
-	I1.text((220, 190), username, font=myFont, fill =(90, 90, 90))
-	I1.text((125, 250), password, font=myFont, fill =(90, 90, 90))
-	
-	# Display edited image
-	
-	# Save the edited image
-	img.save("cardEdited.png")
-
-is_select_folder_path = False
-def pastImg(loopsCounter, loopEndCounter):
-	folder_path ="output/"
- 
-	if is_select_folder_path:
-		folder_path = file_path + "/"
-	CardListName = 'cardList'+ str(loopEndCounter) +'.png'
-	im1 = Image.open('empty.png')
-	if loopsCounter > 0:	
-		im1 = Image.open(folder_path + CardListName)
-	im2 = Image.open('cardEdited.png')
-
-	position = {
-		0: (25, 25),
-  		1: (600, 25),
-    	2: (25, 380),
-     	3: (600, 380),
-		4: (25, 740),
-		5: (600, 740),
-		6: (25, 1100),
-		7: (600, 1100),
-		8: (25, 1430),
-  		9:(600, 1430)
-	}
-
-	im2 = im2.resize((500, 300))
-	back_im = im1.copy()
-	back_im.paste(im2, position[loopsCounter])
-	back_im.save(folder_path + CardListName, quality=100)
-
-def generate_random_password():
-	## length of password from the user
-	length = 8
-
-	## shuffling the characters
-	random.shuffle(characters)
-	
-	## picking random characters from the list
-	password = []
-	for i in range(length):
-		password.append(random.choice(characters))
-
-	## shuffling the resultant password
-	random.shuffle(password)
-
-	## converting the list to string
-	## printing the list
-	return "".join(password)
+# Function to create a user card image
+def create_card(username, password, output_path="cardEdited.png"):
+    img = Image.open('card.jpg')
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype('font/DINNextLTArabic-Medium-4.ttf', 30)
+    draw.text((220, 190), username, font=font, fill=(90, 90, 90))
+    draw.text((125, 250), password, font=font, fill=(90, 90, 90))
+    img.save(output_path)
 
 
+# Main function to generate users and add to MikroTik
+def start_generation(username_list, add_to_mikrotik, host, profile, mikrotik_username, mikrotik_password, status_label):
+    try:
+        api = None
+        if add_to_mikrotik:
+            connection = routeros_api.RouterOsApiPool(host, username=mikrotik_username, password=mikrotik_password, plaintext_login=True)
+            api = connection.get_api()
+            if not api.get_resource('ip/hotspot/user/profile').get(name=profile):
+                status_label.value = "ط®ط·ط£ ظپظٹ ط§ط³ظ… ط§ظ„ط¨ط±ظˆظپط§ظٹظ„"
+                return
 
-def getExcel():
-    df = pd.read_excel (r'excel.xlsx', index_col=0)
-    return df.index
+        for username in username_list:
+            password = generate_random_password()
+            if add_to_mikrotik:
+                api.get_resource('ip/hotspot/user').add(name=username, password=password, profile=profile)
+            create_card(username, password)
+            status_label.value = f"طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ط¨ط·ط§ظ‚ط© ظ„ظ„ظ…ط³طھط®ط¯ظ… {username}"
+            status_label.update()
 
-usernameList = getExcel()
-
-def startGen(is_add_to_mikrotik=0, host="", profile="", my_label=None, mikrotik_username="", mikrotik_password=""):
-	from routeros_api.exceptions import RouterOsApiCommunicationError, RouterOsApiConnectionError
-	loopsCounter = 0
-	loopEndCounter = 0
- 	
-	api = None
-	if is_add_to_mikrotik:
-		try:
-			connection = routeros_api.RouterOsApiPool(host, username=mikrotik_username, password=mikrotik_password, plaintext_login=True)
-			api = connection.get_api()
-		except RouterOsApiCommunicationError:
-			my_label.config(text = "خطاء في اسم المستخدم وكلمة المرور")
-			return
-		except RouterOsApiConnectionError:
-			my_label.config(text = "لا يمكن الاتصال بجهاز الميكروتيك")
-			return
-	for i in usernameList:
-		username = i
-		password = generate_random_password()
-		if isinstance(i, (float)):
-			continue
-		if is_add_to_mikrotik:
-			if not api.get_resource('ip/hotspot/user/profile').get(name=profile):
-				my_label.config(text = "هناك خطاء في في اسم البروفايل")
-				return
-
-			try:
-				api.get_resource('ip/hotspot/user').add(name=username, password=password, profile=profile)
-			except:
-				pass
-		createCard(username, password)
-		pastImg(loopsCounter, loopEndCounter)
-		print("username: " + username, "  password: " + password, "Done")
-		loopsCounter += 1
-		if loopsCounter >= 10:
-			loopsCounter = 0
-			loopEndCounter +=1
-	my_label.config(text = "تم الانتهاء بنجاح")
-
-def get_file_path():
-    global file_path
-    # Open and return file path
-    file_path= filedialog.askdirectory()
-    global is_select_folder_path
-    is_select_folder_path = True
-    
-
-root = tk.Tk()
-check_1 = tk.IntVar()
-root.title("SADA PM")
-root.geometry("400x400")
-label = tk.Label(root, text="SADA PM استخراج البطاقات")
-label.pack()
+        status_label.value = "طھظ… ط§ظ„ط§ظ†طھظ‡ط§ط، ط¨ظ†ط¬ط§ط­"
+    except Exception as e:
+        status_label.value = f"ط­ط¯ط« ط®ط·ط£: {str(e)}"
 
 
+# UI function with Flet
+def main(page: ft.Page):
+    page.title = "SADA PM - ط¥ظ†ط´ط§ط، ط¨ط·ط§ظ‚ط§طھ ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ†"
+    page.scroll = "auto"
 
-add_to_mikrotik = tk.Checkbutton(root, text="اضافة المستخدمين الى مايكروتيك", onvalue = 1, offvalue = 0, variable=check_1)
-add_to_mikrotik.pack()
+    # UI Elements
+    mikrotik_host = ft.TextField(label="IP ط¬ظ‡ط§ط² ط§ظ„ظ…ط§ظٹظƒط±ظˆطھظٹظƒ", width=300)
+    mikrotik_username = ft.TextField(label="ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ…", width=300)
+    mikrotik_password = ft.TextField(label="ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±", password=True, width=300)
+    profile = ft.TextField(label="ط§ط³ظ… ط§ظ„ط¨ط±ظˆظپط§ظٹظ„", width=300)
+    add_to_mikrotik = ft.Checkbox(label="ط¥ط¶ط§ظپط© ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ط¥ظ„ظ‰ ظ…ط§ظٹظƒط±ظˆطھظٹظƒ")
+    status_label = ft.Text("")
+    username_file = ft.FilePicker(on_result=lambda e: None)
+    file_button = ft.ElevatedButton("ط§ط®طھط± ظ…ظ„ظپ ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ†", on_click=lambda e: username_file.pick_files())
 
-tk.Label(root, text="ايبي المايكروتيك").pack()
-mikrotik_host = tk.Entry(root)
-mikrotik_host.pack()
+    # Start generation button
+    def start_button_click(e):
+        try:
+            username_list = pd.read_excel(username_file.result.files[0].path, index_col=0).index.tolist()
+            start_generation(
+                username_list,
+                add_to_mikrotik.value,
+                mikrotik_host.value,
+                profile.value,
+                mikrotik_username.value,
+                mikrotik_password.value,
+                status_label
+            )
+        except Exception as ex:
+            status_label.value = f"ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ظ‚ط±ط§ط،ط©: {ex}"
+            status_label.update()
 
-tk.Label(root, text="اسم المستخدم للمايكروتيك").pack()
-mikrotik_username = tk.Entry(root)
-mikrotik_username.pack()
+    start_button = ft.ElevatedButton("ط¨ط¯ط، ط§ظ„ط¹ظ…ظ„ظٹط©", on_click=start_button_click)
 
-tk.Label(root, text="كلمة المرور للمايكروتيك").pack()
-mikrotik_password = tk.Entry(root)
-mikrotik_password.pack()
+    # Adding elements to the page
+    page.add(
+        mikrotik_host,
+        mikrotik_username,
+        mikrotik_password,
+        profile,
+        add_to_mikrotik,
+        file_button,
+        start_button,
+        status_label
+    )
 
 
-tk.Label(root, text="بروفايل المستخدمين").pack()
-profile = tk.Entry(root)
-profile.pack()
-
-
-tk.Label(root, text = "عند البدء يرجى الانتظار وعدم اغلاق النافذا").pack()
-def getvalue():
-	is_add_to_mikrotik = check_1.get()
-
-	startGen(is_add_to_mikrotik,mikrotik_host.get(), profile.get(), my_label, mikrotik_username.get() ,mikrotik_password.get())
-
-b1 = tk.Button(root, text = "مكان حفظ الصور", command = get_file_path).pack()
-
-tk.Button(root, text="بدء", command=getvalue).pack()
-my_label = tk.Label(root, text = "")
-my_label.pack()
-root.mainloop()
+# Run the Flet app
+app(main)
